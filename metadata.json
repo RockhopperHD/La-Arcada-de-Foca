@@ -1,0 +1,5 @@
+{
+  "name": "La Arcada de Foca",
+  "description": "A development tool to parse and test AI-generated JSON and JavaScript for the ITWORKS educational game platform. Paste the raw output from the generator AI to see a live preview of the interactive game.",
+  "requestFramePermissions": []
+}
