@@ -10,7 +10,8 @@ interface EditPanelProps {
         selectedFeatures: string[],
         generalRequest: string,
         isFixing: boolean,
-        fixContext: string
+        customFixText: string,
+        selectedFixCheckboxes: string[]
     ) => void;
     isAnalyzing: boolean;
     isEditing: boolean;
@@ -34,7 +35,18 @@ const EditPanel: React.FC<EditPanelProps> = ({
     const [generalRequest, setGeneralRequest] = useState('');
     
     const [isFixRequest, setIsFixRequest] = useState(false);
-    const [fixContext, setFixContext] = useState('');
+    const [customFixText, setCustomFixText] = useState('');
+    const [selectedFixCheckboxes, setSelectedFixCheckboxes] = useState<string[]>([]);
+
+    const fixCheckOptions = [
+        "...and there's just a blank white screen on startup",
+        "...and I can't get past an in-game menu",
+        "...and the buttons don't work",
+        "...and things are falling outside the center container (box in the center)",
+        "...and the graphic design colors are completely off or inaccessible",
+        "...and the content is inappropriate"
+    ];
+
 
     useEffect(() => {
         if (parameters) {
@@ -54,7 +66,8 @@ const EditPanel: React.FC<EditPanelProps> = ({
             setGeneralRequest('');
             setSelectedSuggestions([]);
             setIsFixRequest(false);
-            setFixContext('');
+            setCustomFixText('');
+            setSelectedFixCheckboxes([]);
         }
     }, [parameters]);
 
@@ -74,6 +87,14 @@ const EditPanel: React.FC<EditPanelProps> = ({
         );
     };
 
+    const handleFixCheckboxChange = (option: string) => {
+        setSelectedFixCheckboxes(prev => 
+            prev.includes(option)
+                ? prev.filter(s => s !== option)
+                : [...prev, option]
+        );
+    };
+
     const handleSubmit = () => {
         const updatedNumbers: { [key: string]: number } = {};
         Object.keys(formValues).forEach(key => {
@@ -85,7 +106,7 @@ const EditPanel: React.FC<EditPanelProps> = ({
             }
         });
 
-        onEdit(updatedNumbers, selectedSuggestions, generalRequest, isFixRequest, fixContext);
+        onEdit(updatedNumbers, selectedSuggestions, generalRequest, isFixRequest, customFixText, selectedFixCheckboxes);
     };
     
     if (isAnalyzing) {
@@ -128,12 +149,28 @@ const EditPanel: React.FC<EditPanelProps> = ({
                         <label htmlFor="fixRequest" className="text-sm font-medium text-yellow-300">The game doesn't work</label>
                     </div>
                     {isFixRequest && (
-                        <textarea
-                            value={fixContext}
-                            onChange={(e) => setFixContext(e.target.value)}
-                            className="w-full bg-gray-900 border border-yellow-700 rounded-md p-2 text-sm font-mono focus:ring-2 focus:ring-yellow-500 focus:outline-none resize-none h-20"
-                            placeholder="Optional: Describe what's wrong..."
-                        />
+                        <>
+                            <textarea
+                                value={customFixText}
+                                onChange={(e) => setCustomFixText(e.target.value)}
+                                className="w-full bg-gray-900 border border-yellow-700 rounded-md p-2 text-sm font-mono focus:ring-2 focus:ring-yellow-500 focus:outline-none resize-none h-20"
+                                placeholder="Optional: Describe what's wrong..."
+                            />
+                            <div className="pt-2 space-y-1">
+                                {fixCheckOptions.map((option, index) => (
+                                    <div key={index} className="flex items-center gap-2">
+                                        <input
+                                            type="checkbox"
+                                            id={`fix-option-${index}`}
+                                            checked={selectedFixCheckboxes.includes(option)}
+                                            onChange={() => handleFixCheckboxChange(option)}
+                                            className="h-4 w-4 text-yellow-500 bg-gray-800 border-gray-600 rounded focus:ring-yellow-500 focus:ring-offset-gray-900 cursor-pointer"
+                                        />
+                                        <label htmlFor={`fix-option-${index}`} className="text-sm font-normal text-gray-400 cursor-pointer">{option}</label>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
                     )}
                 </div>
 

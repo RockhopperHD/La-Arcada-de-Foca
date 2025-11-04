@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI, Type } from "@google/genai";
 import type { GameData, ParseResult, GameParameter } from './types';
 import InputPanel from './components/InputPanel';
@@ -201,6 +202,9 @@ const App: React.FC = () => {
     // State for API Key
     const [apiKeySelected, setApiKeySelected] = useState(false);
 
+    // Ref for file input
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
     useEffect(() => {
         const checkApiKey = async () => {
             if (window.aistudio && await window.aistudio.hasSelectedApiKey()) {
@@ -395,7 +399,8 @@ const App: React.FC = () => {
         selectedFeatures: string[],
         generalRequest: string,
         isFixing: boolean,
-        fixContext: string
+        customFixText: string,
+        selectedFixCheckboxes: string[]
     ) => {
         if (!gameScript) return;
         setIsEditing(true);
@@ -405,10 +410,30 @@ const App: React.FC = () => {
         let changesRequested = false;
 
         if (isFixing) {
-            formattedChanges += "CRITICAL: The user has indicated 'The game doesn't work.' Please analyze the entire script for bugs, errors, or incomplete logic and prioritize fixing it.\n";
-            if (fixContext.trim()) {
-                formattedChanges += `User's context on the problem: "${fixContext.trim()}"\n`;
+            let fixPrompt = "CRITICAL: The user has indicated 'The game doesn't work.' Please analyze the entire script for bugs, errors, or incomplete logic and prioritize fixing it.\nPay close attention to the following user-reported issues:\n";
+        
+            const detailedInstructions: { [key: string]: string } = {
+                "...and there's just a blank white screen on startup": "- **Blank White Screen:** This often means a critical JavaScript error is halting execution. Check for syntax errors, undefined variables, incorrect function calls, or infinite loops right at the start. Ensure the game correctly listens for the 'gameStart' event before running any initialization code.",
+                "...and I can't get past an in-game menu": "- **Stuck on a Menu:** The logic for progressing from one game state to another is likely broken. Trace the user flow from the menu. Check the conditions that allow the user to proceed and make sure they can be met.",
+                "...and the content is inappropriate": "- **Inappropriate Content:** Review all text, questions, and examples in the game. Ensure all content is friendly, educational, and appropriate for all ages. Remove any references to violence, illegal activities, or adult themes.",
+                "...and the buttons don't work": "- **Buttons Not Working:** Verify all element selectors (e.g., `document.getElementById`) are correct and that the elements exist in the DOM when the script runs. Check that `addEventListener` or `onclick` handlers are properly attached and that the functions they call are defined and error-free.",
+                "...and things are falling outside the center container (box in the center)": "- **Elements Outside Container:** All game elements MUST be appended to the `div` with `id='gameArea'`. Review the code to ensure no elements are appended to `document.body` or other external elements. Check for absolute positioning CSS that might be breaking the layout.",
+                "...and the graphic design colors are completely off or inaccessible": "- **Incorrect Colors/Design:** The game's styling MUST use the provided CSS variables (e.g., `var(--color-primary)`, `var(--color-bg)`). Search the code for and remove any hardcoded color values like `#FFFFFF`, `white`, `black`, `#000`, etc., as they break theme compatibility."
+            };
+    
+            selectedFixCheckboxes.forEach(key => {
+                if (detailedInstructions[key]) {
+                    fixPrompt += `${detailedInstructions[key]}\n`;
+                }
+            });
+    
+            if (customFixText.trim()) {
+                fixPrompt += `\nHere is the user's custom description of the problem; think logically about what they're saying and apply it -- do not blindly make a change here. They have said: "${customFixText.trim()}"\n`;
+            } else if (selectedFixCheckboxes.length === 0) {
+                fixPrompt += "\nThe user did not provide specific details, so please perform a general code review to find and fix potential issues.\n";
             }
+            
+            formattedChanges += fixPrompt;
             changesRequested = true;
         }
 
@@ -468,6 +493,67 @@ const App: React.FC = () => {
         }
     };
 
+    const handleExport = () => {
+        if (!gameData || !gameScript) return;
+    
+        // Sanitize title for filename
+        const fileName = `${gameData.title.toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 30)}.txt`;
+    
+        const fileContent = `${JSON.stringify(gameData, null, 2)}
+%%BEGINCODE%%
+${gameScript}
+%%ENDCODE%%`;
+    
+        const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
+    
+    const handleImportClick = () => {
+        if (fileInputRef.current) {
+            fileInputRef.current.value = ''; // Reset to allow re-importing same file
+        }
+        fileInputRef.current?.click();
+    };
+
+    const handleFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const text = e.target?.result;
+            if (typeof text === 'string') {
+                setError(null);
+                setGameData(null);
+                setGameScript(null);
+
+                const { gameData: parsedData, gameScript: parsedScript, error: parseError } = parseAiOutput(text);
+                
+                if (parseError) {
+                    setError(`Import Error: ${parseError}`);
+                } else {
+                    setGameData(parsedData);
+                    setGameScript(parsedScript);
+                    await analyzeGameScript(parsedScript!);
+                    setActiveTab('edit');
+                }
+            } else {
+                setError("Import Error: Could not read the file content.");
+            }
+        };
+        reader.onerror = () => {
+            setError("Import Error: Failed to read the file.");
+        };
+        reader.readAsText(file);
+    };
+
     if (!apiKeySelected) {
         return (
             <div className="bg-gray-800 text-gray-100 min-h-screen font-sans flex flex-col items-center justify-center p-4">
@@ -503,6 +589,13 @@ const App: React.FC = () => {
 
     return (
         <div className="bg-gray-800 text-gray-100 min-h-screen font-sans flex flex-col">
+            <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileSelected}
+                accept=".txt,text/plain"
+                style={{ display: 'none' }}
+            />
             <header className="bg-gray-900 shadow-lg p-4">
                 <h1 className="text-2xl font-bold text-center text-blue-400">
                     La Arcada de Foca
@@ -510,28 +603,53 @@ const App: React.FC = () => {
             </header>
             <main className="flex-grow grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 h-[calc(100vh-72px)]">
                 <div className="flex flex-col bg-gray-900 rounded-lg p-4 shadow-xl h-full">
-                    <div className="flex border-b border-gray-700 mb-4">
-                        <button
-                            onClick={() => setActiveTab('generate')}
-                            className={`py-2 px-4 text-sm font-medium transition-colors ${
-                                activeTab === 'generate'
-                                    ? 'border-b-2 border-blue-400 text-blue-400'
-                                    : 'text-gray-400 hover:text-white'
-                            }`}
-                        >
-                            Generate Game
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('edit')}
-                            disabled={!gameScript}
-                            className={`py-2 px-4 text-sm font-medium transition-colors ${
-                                activeTab === 'edit'
-                                    ? 'border-b-2 border-blue-400 text-blue-400'
-                                    : 'text-gray-400 hover:text-white'
-                            } disabled:text-gray-600 disabled:cursor-not-allowed`}
-                        >
-                            Edit & Fix
-                        </button>
+                    <div className="flex justify-between border-b border-gray-700 mb-4">
+                        <div className="flex">
+                            <button
+                                onClick={() => setActiveTab('generate')}
+                                className={`py-2 px-4 text-sm font-medium transition-colors ${
+                                    activeTab === 'generate'
+                                        ? 'border-b-2 border-blue-400 text-blue-400'
+                                        : 'text-gray-400 hover:text-white'
+                                }`}
+                            >
+                                Generate Game
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('edit')}
+                                disabled={!gameScript}
+                                className={`py-2 px-4 text-sm font-medium transition-colors ${
+                                    activeTab === 'edit'
+                                        ? 'border-b-2 border-blue-400 text-blue-400'
+                                        : 'text-gray-400 hover:text-white'
+                                } disabled:text-gray-600 disabled:cursor-not-allowed`}
+                            >
+                                Edit & Fix
+                            </button>
+                        </div>
+                        <div className="flex items-center">
+                            <button
+                                onClick={handleImportClick}
+                                className="py-2 px-4 text-sm font-medium text-gray-400 hover:text-white transition-colors flex items-center gap-2"
+                                title="Import Game from File"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                </svg>
+                                Import
+                            </button>
+                            <button
+                                onClick={handleExport}
+                                disabled={!gameScript || !gameData}
+                                className="py-2 px-4 text-sm font-medium text-gray-400 hover:text-white transition-colors disabled:text-gray-600 disabled:cursor-not-allowed flex items-center gap-2"
+                                title="Export Game Data & Script"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                                Export
+                            </button>
+                        </div>
                     </div>
 
                     <div className="flex-grow overflow-hidden relative">
@@ -560,7 +678,7 @@ const App: React.FC = () => {
                                 />
                             ) : (
                                 <div className="flex items-center justify-center h-full text-gray-400">
-                                    <p>Generate a game first to enable editing and fixing.</p>
+                                    <p>Generate or import a game to enable editing.</p>
                                 </div>
                             )
                         )}
