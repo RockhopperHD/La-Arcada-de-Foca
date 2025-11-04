@@ -1,12 +1,6 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
-
-# Run and deploy your AI Studio app
-
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/drive/1Zc5hkxH3fuBM_7EXd6t36xLZ-t5IqjeU
+# PLEASE BE CAREFUL / TEN CUIDADO POR FAVOR
+This program uses MY API keys. They CAN run out of use. They're good for 50 games a day... so don't make more than like, ten? Idk. 
+Este programa usa MIS claves de API. SOLO tienen 50 usos de Pro (hacer juegos) hasta son INÚTILES A TODOS por 24 horas. Por favor no hace más de 10 juegos.
 
 ## Run Locally
 
