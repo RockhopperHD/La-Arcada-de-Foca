@@ -355,6 +355,7 @@ const App: React.FC = () => {
         setGameScript(null);
 
         try {
+            console.log("Using API Key:", process.env.API_KEY ? "Present" : "Missing");
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             
             const userPrompt = `
@@ -459,46 +460,46 @@ const App: React.FC = () => {
         }
     };
     
-    const handleSelectKey = async () => {
-        if (window.aistudio) {
-            await window.aistudio.openSelectKey();
-            // Assume success to avoid race condition and re-render
-            setApiKeySelected(true);
-            setError(null); // Clear previous API key errors
-        }
-    };
+    // const handleSelectKey = async () => {
+    //     if (window.aistudio) {
+    //         await window.aistudio.openSelectKey();
+    //         // Assume success to avoid race condition and re-render
+    //         setApiKeySelected(true);
+    //         setError(null); // Clear previous API key errors
+    //     }
+    // };
 
-    if (!apiKeySelected) {
-        return (
-            <div className="bg-gray-800 text-gray-100 min-h-screen font-sans flex flex-col items-center justify-center p-4">
-                 <div className="bg-gray-900 rounded-lg p-8 shadow-xl text-center max-w-lg">
-                    <h1 className="text-2xl font-bold text-blue-400 mb-4">
-                        API Key Required
-                    </h1>
-                    <p className="text-gray-300 mb-6">
-                        To use the AI Game Generator, you need to select a Gemini API key. Please ensure your project has billing is enabled.
-                    </p>
-                    <button
-                        onClick={handleSelectKey}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200 ease-in-out transform hover:scale-105"
-                    >
-                        Select API Key
-                    </button>
-                    <p className="text-xs text-gray-500 mt-4">
-                        For more information on billing, visit{' '}
-                        <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
-                            ai.google.dev/gemini-api/docs/billing
-                        </a>.
-                    </p>
-                    {error && (
-                        <div className="mt-4 text-red-300 bg-red-900/50 p-3 rounded-md text-sm font-mono border border-red-700 text-left">
-                             <pre className="whitespace-pre-wrap">{error}</pre>
-                        </div>
-                    )}
-                 </div>
-            </div>
-        );
-    }
+    // if (!apiKeySelected) {
+    //     return (
+    //         <div className="bg-gray-800 text-gray-100 min-h-screen font-sans flex flex-col items-center justify-center p-4">
+    //              <div className="bg-gray-900 rounded-lg p-8 shadow-xl text-center max-w-lg">
+    //                 <h1 className="text-2xl font-bold text-blue-400 mb-4">
+    //                     API Key Required
+    //                 </h1>
+    //                 <p className="text-gray-300 mb-6">
+    //                     To use the AI Game Generator, you need to select a Gemini API key. Please ensure your project has billing is enabled.
+    //                 </p>
+    //                 <button
+    //                     onClick={handleSelectKey}
+    //                     className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200 ease-in-out transform hover:scale-105"
+    //                 >
+    //                     Select API Key
+    //                 </button>
+    //                 <p className="text-xs text-gray-500 mt-4">
+    //                     For more information on billing, visit{' '}
+    //                     <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
+    //                         ai.google.dev/gemini-api/docs/billing
+    //                     </a>.
+    //                 </p>
+    //                 {error && (
+    //                     <div className="mt-4 text-red-300 bg-red-900/50 p-3 rounded-md text-sm font-mono border border-red-700 text-left">
+    //                          <pre className="whitespace-pre-wrap">{error}</pre>
+    //                     </div>
+    //                 )}
+    //              </div>
+    //         </div>
+    //     );
+    // }
 
 
     return (
