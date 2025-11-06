@@ -19,3 +19,18 @@ export interface GameParameter {
   type: 'number' | 'string' | 'boolean' | 'array_string' | 'array_object' | 'object';
   value: any;
 }
+
+export interface UserMessage {
+    role: 'user';
+    content: string;
+}
+
+export interface AinaraMessage {
+    role: 'model';
+    header: string;
+    body: string;
+    footer: string;
+    language: string;
+}
+
+export type Message = UserMessage | AinaraMessage;
