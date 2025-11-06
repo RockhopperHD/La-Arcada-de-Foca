@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI, Chat } from "@google/genai";
 import type { Message, AinaraMessage } from '../types';
@@ -8,9 +7,59 @@ interface ChatPanelProps {
     chat: Chat | null;
     messages: Message[];
     setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
+    onIdeaImport: (idea: string) => void;
 }
 
-const ChatPanel: React.FC<ChatPanelProps> = ({ handleApiKeyError, chat, messages, setMessages }) => {
+// New component for rendering basic markdown
+const MarkdownRenderer: React.FC<{ text: string }> = ({ text }) => {
+  const toHtml = (markdown: string) => {
+    // Escape HTML to prevent XSS, we'll re-insert HTML tags for markdown
+    let html = markdown
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+      
+    // Process blocks (paragraphs and lists) separated by double newlines
+    const blocks = html.split('\n\n');
+    const htmlBlocks = blocks.map(block => {
+      if (!block.trim()) return '';
+
+      // **bold**
+      block = block.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      // *italic*
+      block = block.replace(/\*(.*?)\*/g, '<em>$1</em>');
+      // [link](url)
+      block = block.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:underline">$1</a>');
+
+      // Unordered list
+      if (block.match(/^\s*[\-\*]\s/)) {
+        const items = block.split('\n').map(item => `<li class="ml-4">${item.replace(/^\s*[\-\*]\s/, '')}</li>`).join('');
+        return `<ul class="list-disc list-inside space-y-1">${items}</ul>`;
+      }
+      // Ordered list
+      if (block.match(/^\s*\d+\.\s/)) {
+        const items = block.split('\n').map(item => `<li class="ml-4">${item.replace(/^\s*\d+\.\s/, '')}</li>`).join('');
+        return `<ol class="list-decimal list-inside space-y-1">${items}</ol>`;
+      }
+      // Paragraphs with line breaks
+      return `<p>${block.replace(/\n/g, '<br/>')}</p>`;
+    });
+
+    return htmlBlocks.join('');
+  };
+
+  return (
+    <div 
+      className="font-sans space-y-4"
+      dangerouslySetInnerHTML={{ __html: toHtml(text) }} 
+    />
+  );
+};
+
+
+const ChatPanel: React.FC<ChatPanelProps> = ({ handleApiKeyError, chat, messages, setMessages, onIdeaImport }) => {
     const [inputValue, setInputValue] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -36,8 +85,14 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ handleApiKeyError, chat, messages
             
             let parsedResponse: Omit<AinaraMessage, 'role'>;
             try {
-                const cleanedJson = rawText.replace(/```json\n?/s, '').replace(/```\n?$/s, '');
-                parsedResponse = JSON.parse(cleanedJson);
+                // More robust JSON parsing: find the JSON object within the response text.
+                const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+                if (jsonMatch && jsonMatch[0]) {
+                    parsedResponse = JSON.parse(jsonMatch[0]);
+                } else {
+                    // If no JSON object is found, treat the whole response as an error.
+                     throw new Error("No valid JSON object found in the AI response.");
+                }
             } catch (e) {
                 parsedResponse = {
                     header: "Response Error",
@@ -66,8 +121,22 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ handleApiKeyError, chat, messages
     };
 
     return (
-        <div className="flex flex-col h-full">
-            <div className="flex-grow p-4 overflow-y-auto space-y-4">
+        <div className="absolute inset-0 flex flex-col">
+            <div className="flex-shrink-0 flex justify-end items-center px-4 pt-2">
+                 {messages.length > 0 && (
+                    <button 
+                        onClick={() => setMessages([])} 
+                        className="text-xs text-gray-500 hover:text-gray-300 hover:bg-gray-700/50 rounded p-1 transition-colors flex items-center gap-1" 
+                        title="Clear Chat History"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Clear
+                    </button>
+                 )}
+            </div>
+            <div className="flex-grow p-4 overflow-y-auto space-y-4 min-h-0">
                 {messages.length === 0 && !isLoading && (
                     <div className="flex flex-col items-center justify-center h-full text-center text-gray-400">
                         <img src="isotipo.png" alt="AINARA Logo" className="w-24 h-24 mb-4 rounded-full" />
@@ -84,9 +153,13 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ handleApiKeyError, chat, messages
                             </div>
                         );
                     } else { // role === 'model'
+                        const ideaMarker = '&&IDEA&&';
+                        const bodyParts = msg.body.split(ideaMarker);
+
                         const handleCopy = () => {
-                            navigator.clipboard.writeText(msg.body).catch(err => console.error('Failed to copy text: ', err));
+                            navigator.clipboard.writeText(msg.body.replace(/&&IDEA&&/g, '')).catch(err => console.error('Failed to copy text: ', err));
                         };
+
                         return (
                             <div key={index} className="flex justify-start">
                                 <div className="flex flex-col gap-1 items-start max-w-lg">
@@ -100,7 +173,38 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ handleApiKeyError, chat, messages
                                             <button onClick={handleCopy} className="absolute top-1 right-1 p-1 rounded bg-gray-800/50 text-gray-400 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity" title="Copy body">
                                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                                             </button>
-                                            <pre className="whitespace-pre-wrap font-sans">{msg.body}</pre>
+                                            
+                                            {bodyParts.map((part, i) => {
+                                                const isLastPart = i === bodyParts.length - 1;
+                                                
+                                                // The actual idea text is the trimmed part, with any markdown list markers removed.
+                                                const ideaText = part.trim().replace(/^\s*([*\-]\s*|\d+\.\s*)/, '');
+                                                
+                                                // Show a button only if this isn't the last part and the cleaned idea text has content.
+                                                const showButton = !isLastPart && ideaText;
+                                                
+                                                // Don't render anything for an empty trailing part.
+                                                if (!part.trim() && isLastPart) return null;
+
+                                                return (
+                                                    <div key={i}>
+                                                        <MarkdownRenderer text={part} />
+                                                        {showButton && (
+                                                            <div className="pt-3 mt-2 border-t border-gray-600/50">
+                                                                <button
+                                                                    onClick={() => onIdeaImport(ideaText)}
+                                                                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm py-1 px-3 rounded-lg transition-all flex items-center gap-2"
+                                                                >
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c.621.206 1.213.448 1.77.722A11.986 11.986 0 0118 10.5c.34.183.653.386.944.612m-6.27-5.176a11.985 11.985 0 015.658 5.658m-5.658-5.658A11.982 11.982 0 005.05 9.42L9.25 5.221a3 3 0 01.5-.217z" />
+                                                                    </svg>
+                                                                    Use This Idea
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     )}
                                     {msg.footer && (

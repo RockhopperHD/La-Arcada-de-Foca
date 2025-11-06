@@ -120,7 +120,7 @@ const EditPanel: React.FC<EditPanelProps> = ({
         );
     }
     
-    const SuggestionCard = ({ suggestion }: { suggestion: string }) => {
+    const SuggestionCard: React.FC<{ suggestion: string }> = ({ suggestion }) => {
         const isSelected = selectedSuggestions.includes(suggestion);
         return (
             <div 
